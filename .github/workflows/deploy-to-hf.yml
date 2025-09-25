@@ -1,10 +1,24 @@
-- name: Push to HF Space (direct)
-  env:
-    HF_TOKEN: ${{ secrets.HF_TOKEN }}
-    HF_SPACE: ${{ secrets.HF_SPACE }}   # 例: Shu8jst/mlb-hr-prob-app
-  run: |
-    set -e
-    # HF_SPACE は "ユーザー名/スペース名" なので、そのまま使います
-    GIT_URL="https://Shu8jst:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
-    # main を Space の main に強制同期（初回は --force が楽）
-    git push --force "$GIT_URL" HEAD:main
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Push to HF Space (direct)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }} # 例: Shu8jst/mlb-hr-prob-app
+        run: |
+          set -e
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          # ユーザー名:トークン@ の形式で Space リポジトリへ push
+          GIT_URL="https://Shu8jst:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
+          git push --force "$GIT_URL" HEAD:main
