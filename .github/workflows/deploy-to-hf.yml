@@ -11,14 +11,19 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Push to HF Space (direct)
+      - name: Configure Git and auth header
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE: ${{ secrets.HF_SPACE }} # 例: Shu8jst/mlb-hr-prob-app
         run: |
-          set -e
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
-          # ユーザー名:トークン@ の形式で Space リポジトリへ push
-          GIT_URL="https://Shu8jst:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
-          git push --force "$GIT_URL" HEAD:main
+          # ここがポイント：トークンをURLに埋め込まず、HFドメインへのHTTPヘッダーに付与
+          git config --global http.https://huggingface.co/.extraheader "Authorization: Bearer ${HF_TOKEN}"
+
+      - name: Push to HF Space
+        env:
+          HF_SPACE: ${{ secrets.HF_SPACE }}  # 例: Shu8jst/mlb-hr-prob-app
+        run: |
+          set -e
+          # 通常のURLでOK（トークンはextraheaderで送られる）
+          git push --force "https://huggingface.co/spaces/${HF_SPACE}" HEAD:main
