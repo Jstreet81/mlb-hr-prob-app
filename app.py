@@ -486,22 +486,22 @@ def main():
         )
 
         return (
-          df,
-          map_paths["LogisticRegression"],
-          map_paths["SVM_RBF"],
-          map_paths["RandomForest"],
-          surf_paths["LogisticRegression"],
-          surf_paths["SVM_RBF"],
-          surf_paths["RandomForest"],
-          rows,                 # state_table_rows 用
-          map_paths,            # state_map_paths 用
-          surf_paths,           # state_surf_paths 用
-          fig_log, fig_svm, fig_rf,
-          curve_path,           # Image: curve_ev_only
-          compare_curve_path,   # Image: curve_compare
-          curve_path,           # ★ State: state_curve_path（追加）
-          compare_curve_path    # ★ State: state_compare_curve_path（追加）
-      )
+            df,
+            map_paths["LogisticRegression"],
+            map_paths["SVM_RBF"],
+            map_paths["RandomForest"],
+            surf_paths["LogisticRegression"],
+            surf_paths["SVM_RBF"],
+            surf_paths["RandomForest"],
+            rows,                 # state_table_rows 用
+            map_paths,            # state_map_paths 用
+            surf_paths,           # state_surf_paths 用
+            fig_log, fig_svm, fig_rf,   # ← ← ここを直す！
+            curve_path,           # Image: curve_ev_only
+            compare_curve_path,   # Image: curve_compare
+            curve_path,           # ★ State: state_curve_path（追加）
+            compare_curve_path    # ★ State: state_compare_curve_path（追加）
+        )
 
 
     def make_pdf(ev: float, la: float, thr_mode: str, table_rows, map_paths, surf_paths, curve_path, compare_curve_path):
@@ -586,4 +586,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
