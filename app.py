@@ -2,21 +2,12 @@
 """
 MLB HR確率予測 Webアプリ（Gradio, 可視化＋PDF出力, NotoSansJP, 1D曲線/比較曲線込）
 
-統合版：
-- 元アプリ（確率マップ、3D曲面、表、PDF）
-- 追加機能：EVのみロジスティック回帰の 1D 確率曲線
-- 追加機能：LogReg(EVのみ) と LogReg(2D) の比較曲線（LA固定）
-- PDFには 1D 曲線と比較曲線も収録
-
 依存関係（例）:
-    pip install gradio scikit-learn pandas numpy matplotlib plotly reportlab pillow
+    pip install -U gradio>=4.44.1 plotly==5.22.0 scikit-learn pandas numpy matplotlib reportlab pillow
 
 CSV（同一ディレクトリ配置想定）:
     mlb2024_top50_hr_bbe.csv
     mlb2024_top50_nonhrhit_bbe.csv
-
-起動:
-    python hr_predictor_app_merged.py
 """
 
 import os
@@ -28,12 +19,10 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import pandas as pd
-import html as pyhtml
-
 
 # Matplotlib / Plotly
 import matplotlib
-matplotlib.use("Agg")  # headless for Gradio
+matplotlib.use("Agg")  # headless for Gradio/Spaces
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
@@ -94,8 +83,7 @@ def _find_font(cands: List[str]) -> str:
     return ""
 
 def setup_fonts() -> Tuple[str, str]:
-    """NotoSansJP（Regular/Bold）があれば Matplotlib/ReportLab に登録し、rcParamsを日本語に。
-       なければ既定フォントを使う（その際は注意書きを返す）。"""
+    """NotoSansJP を Matplotlib/ReportLab に登録（存在すれば）。"""
     reg = _find_font(NOTO_REG_PATH_CAND)
     bold = _find_font(NOTO_BOLD_PATH_CAND)
 
@@ -145,43 +133,43 @@ def load_dataset(hr_path: str, nonhr_path: str) -> Tuple[np.ndarray, np.ndarray]
 
 def build_models(X: np.ndarray, y: np.ndarray) -> Dict[str, ModelBundle]:
     X_tr, X_va, y_tr, y_va = train_test_split(
-        X, y, test_size=0.25, random_state=42, stratify=y
+        X, y, test_size=0.25, random_state=RANDOM_STATE, stratify=y
     )
 
     # 2D (EV, LA) モデル
     models_2d = {
         "LogisticRegression": Pipeline([("scaler", StandardScaler()),
-                                        ("clf", LogisticRegression(max_iter=200, random_state=42))]),
+                                        ("clf", LogisticRegression(max_iter=200, random_state=RANDOM_STATE))]),
         "SVM_RBF": Pipeline([("scaler", StandardScaler()),
-                             ("clf", SVC(kernel="rbf", probability=True, random_state=42))]),
-        "RandomForest": RandomForestClassifier(n_estimators=300, random_state=42, n_jobs=-1),
+                             ("clf", SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE))]),
+        "RandomForest": RandomForestClassifier(n_estimators=300, random_state=RANDOM_STATE, n_jobs=-1),
     }
 
     bundles: Dict[str, ModelBundle] = {}
 
-    # 2D モデルの学習と Youden しきい値
+    # 2D モデル学習 & Youden しきい値
     for name, est in models_2d.items():
         est.fit(X_tr, y_tr)
-        y_prob_va = est.predict_proba(X_va)[:,1]
+        y_prob_va = est.predict_proba(X_va)[:, 1]
         thr = youden_threshold(y_va, y_prob_va)
-        est.fit(X, y)  # 最終モデル：フルデータで再学習
+        est.fit(X, y)  # フルで再学習
         bundles[name] = ModelBundle(name=name, estimator=est, best_threshold=thr, feature_indices=(0,1))
 
     # 1D (EVのみ) ロジスティック回帰
     model_1d = Pipeline([("scaler", StandardScaler()),
-                         ("clf", LogisticRegression(max_iter=200, random_state=42))])
-    X_tr_1d, X_va_1d = X_tr[:, [0]], X_va[:, [0]]
-    model_1d.fit(X_tr_1d, y_tr)
-    y_prob_va_1d = model_1d.predict_proba(X_va_1d)[:,1]
+                         ("clf", LogisticRegression(max_iter=200, random_state=RANDOM_STATE))])
+    model_1d.fit(X_tr[:, [0]], y_tr)
+    y_prob_va_1d = model_1d.predict_proba(X_va[:, [0]])[:, 1]
     thr_1d = youden_threshold(y_va, y_prob_va_1d)
     model_1d.fit(X[:, [0]], y)
-    bundles["LogReg_EV_only"] = ModelBundle(name="LogReg_EV_only", estimator=model_1d, best_threshold=thr_1d, feature_indices=(0,))
-
+    bundles["LogReg_EV_only"] = ModelBundle(
+        name="LogReg_EV_only", estimator=model_1d, best_threshold=thr_1d, feature_indices=(0,)
+    )
     return bundles
 
 
 # ============================
-# 可視化ユーティリティ（2D / 3D / 1D / 比較）
+# 可視化ユーティリティ
 # ============================
 def make_prob_map_png(model, ev_grid: np.ndarray, la_grid: np.ndarray,
                       ev_point: float, la_point: float, out_path: str) -> str:
@@ -269,7 +257,6 @@ def make_prob_surface_plotly(model, ev_grid: np.ndarray, la_grid: np.ndarray,
 def make_prob_curve_ev_png(
     estimator, ev_grid: np.ndarray, ev_point: float, threshold: float, out_path: str
 ) -> str:
-    """EVのみロジスティック回帰の1D確率曲線（横軸=EV, 縦軸=HR確率）。"""
     x = ev_grid.reshape(-1, 1)
     probs = estimator.predict_proba(x)[:, 1]
     p_at_ev = float(estimator.predict_proba(np.array([[ev_point]]))[:,1])
@@ -293,7 +280,6 @@ def make_prob_curve_compare_png(
     ev_min: float, ev_max: float, ev_point: float, threshold: float, out_path: str,
     n_steps: int = 400, title: str = None
 ) -> str:
-    """比較曲線：EVのみ LogReg vs 2D LogReg（LA固定）。"""
     ev_axis = np.linspace(ev_min, ev_max, n_steps)
     X_ev = ev_axis.reshape(-1, 1)
     X_2d = np.column_stack([ev_axis, np.full_like(ev_axis, la_fixed)])
@@ -326,7 +312,7 @@ def make_prob_curve_compare_png(
 
 
 # ============================
-# PDF生成（1D曲線 & 比較曲線も収録）
+# PDF生成
 # ============================
 def build_pdf(pdf_path: str,
               table_rows: List[List[str]],
@@ -339,7 +325,6 @@ def build_pdf(pdf_path: str,
     reg_path, bold_path = have_noto
 
     styles = getSampleStyleSheet()
-    # フォント指定（ある場合）
     if reg_path and bold_path:
         styles.add(ParagraphStyle(name="HeadingJP", fontName="NotoSansJP-Bold", fontSize=14, leading=18, spaceAfter=10))
         styles.add(ParagraphStyle(name="NormalJP", fontName="NotoSansJP-Regular", fontSize=11, leading=14))
@@ -360,7 +345,6 @@ def build_pdf(pdf_path: str,
     story.append(Paragraph(f"入力条件：EV = {ev:.1f} mph, LA = {la:.1f}°, しきい値 = {thr_mode}", styles["NormalJP"]))
     story.append(Spacer(1, 10))
 
-    # 結果表
     tbl = Table([["モデル","HR確率","使用しきい値","判定"]] + table_rows, colWidths=[140, 100, 100, 120])
     tbl.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.grey),
@@ -373,7 +357,6 @@ def build_pdf(pdf_path: str,
     story.append(tbl)
     story.append(Spacer(1, 12))
 
-    # 2Dマップ（3枚）
     story.append(Paragraph("確率マップ＆決定境界（各モデル）", styles["HeadingJP"]))
     for k in ["LogisticRegression","SVM_RBF","RandomForest"]:
         story.append(RLImage(map_paths[k], width=460, height=460*0.75))
@@ -382,7 +365,6 @@ def build_pdf(pdf_path: str,
 
     story.append(PageBreak())
 
-    # 3D曲面（3枚）
     story.append(Paragraph("HR確率 3D曲面（各モデル）", styles["HeadingJP"]))
     for k in ["LogisticRegression","SVM_RBF","RandomForest"]:
         story.append(RLImage(surf_paths[k], width=460, height=460*0.75))
@@ -391,13 +373,11 @@ def build_pdf(pdf_path: str,
 
     story.append(PageBreak())
 
-    # 1D EVのみ曲線
     if os.path.exists(curve_ev_only_path):
         story.append(Paragraph("EVのみロジスティック回帰：HR確率曲線（横軸=EV）", styles["HeadingJP"]))
         story.append(RLImage(curve_ev_only_path, width=460, height=460*0.65))
         story.append(Spacer(1, 10))
 
-    # モデル比較曲線
     if os.path.exists(compare_curve_path):
         story.append(Paragraph("モデル比較：EVのみ vs 2D（LA固定）", styles["HeadingJP"]))
         story.append(RLImage(compare_curve_path, width=460, height=460*0.65))
@@ -425,7 +405,7 @@ def main():
 
     bundles = build_models(X, y)
 
-    # グリッド範囲をデータから設定（少し余白）
+    # グリッド範囲（少し余白）
     ev_min, ev_max = float(X[:,0].min()) - 2.0, float(X[:,0].max()) + 2.0
     la_min, la_max = float(X[:,1].min()) - 5.0, float(X[:,1].max()) + 5.0
     ev_grid = np.linspace(ev_min, ev_max, 160)
@@ -437,24 +417,24 @@ def main():
         rows = []
         for name, bundle in bundles.items():
             x_sub = x_full[:, list(bundle.feature_indices)]
-            prob = float(bundle.estimator.predict_proba(x_sub)[0, 1])
+            prob = float(bundle.estimator.predict_proba(x_sub)[0,1])
             thr = bundle.best_threshold if thr_mode == "最適（Youden）" else 0.5
             label = "HR" if prob >= thr else "その他ヒット"
             disp_name = {
                 "LogisticRegression": "LogisticRegression",
                 "SVM_RBF": "SVM_RBF",
                 "RandomForest": "RandomForest",
-                "LogReg_EV_only": "LogReg（EVのみ）",
+                "LogReg_EV_only": "LogReg（EVのみ）"
             }.get(name, name)
             rows.append([disp_name, f"{prob:.3f}", f"{thr:.3f}", label])
-        df = pd.DataFrame(rows, columns=["モデル", "HR確率", "使用しきい値", "判定"])
-    
-        # 図を一時ファイルとして保存し、パスを返す
+        df = pd.DataFrame(rows, columns=["モデル","HR確率","使用しきい値","判定"])
+
+        # 図ファイルを一時保存
         tmpdir = tempfile.mkdtemp(prefix="hr_maps_")
         map_paths, surf_paths = {}, {}
-    
-        # 2D/3D 図（2D特徴モデルのみ）
-        for key_for_plot in ["LogisticRegression", "SVM_RBF", "RandomForest"]:
+
+        # 2D/3D 静止図（2D特徴モデルのみ）
+        for key_for_plot in ["LogisticRegression","SVM_RBF","RandomForest"]:
             bundle = bundles[key_for_plot]
             p_map = os.path.join(tmpdir, f"map_{bundle.name}.png")
             p_surf = os.path.join(tmpdir, f"surf_{bundle.name}.png")
@@ -462,59 +442,31 @@ def main():
             make_prob_surface_png(bundle.estimator, ev_grid, la_grid, ev, la, p_surf)
             map_paths[key_for_plot] = p_map
             surf_paths[key_for_plot] = p_surf
-    
-        # インタラクティブ3D（Plotly）→ HTML化（inlineでJS同梱 & 高さ指定）
-        fig_log = make_prob_surface_plotly(bundles["LogisticRegression"].estimator, ev_grid, la_grid, ev, la)
-        fig_svm = make_prob_surface_plotly(bundles["SVM_RBF"].estimator, ev_grid, la_grid, ev, la)
-        fig_rf  = make_prob_surface_plotly(bundles["RandomForest"].estimator,   ev_grid, la_grid, ev, la)
-    
-        html_log = fig_log.to_html(include_plotlyjs="inline", full_html=False)
-        html_svm = fig_svm.to_html(include_plotlyjs="inline", full_html=False)
-        html_rf  = fig_rf.to_html(include_plotlyjs="inline",  full_html=False)
-    
-        # （iframeでサニタイズ影響を回避しつつ高さを固定）
-        safe_log = html_log.replace('"', '&quot;')
-        safe_svm = html_svm.replace('"', '&quot;')
-        safe_rf  = html_rf.replace('"', '&quot;')
-        
-        iframe_log = (
-            "<iframe style='width:100%;height:520px;border:0;' "
-            "sandbox='allow-scripts allow-same-origin' "
-            f'srcdoc="{safe_log}"></iframe>'
-        )
-        iframe_svm = (
-            "<iframe style='width:100%;height:520px;border:0;' "
-            "sandbox='allow-scripts allow-same-origin' "
-            f'srcdoc="{safe_svm}"></iframe>'
-        )
-        iframe_rf = (
-            "<iframe style='width:100%;height:520px;border:0;' "
-            "sandbox='allow-scripts allow-same-origin' "
-            f'srcdoc="{safe_rf}"></iframe>'
-        )
 
-    
-        # EVのみ 1D 曲線（しきい値は選択に追随）
+        # インタラクティブ3D（Plotly Figureをそのまま返す）
+        fig_log = make_prob_surface_plotly(bundles['LogisticRegression'].estimator, ev_grid, la_grid, ev, la)
+        fig_svm = make_prob_surface_plotly(bundles['SVM_RBF'].estimator,       ev_grid, la_grid, ev, la)
+        fig_rf  = make_prob_surface_plotly(bundles['RandomForest'].estimator,   ev_grid, la_grid, ev, la)
+
+        # EVのみ 1D 曲線
         thr_ev = bundles["LogReg_EV_only"].best_threshold if thr_mode == "最適（Youden）" else 0.5
         curve_path = os.path.join(tmpdir, "curve_logreg_ev_only.png")
         make_prob_curve_ev_png(bundles["LogReg_EV_only"].estimator, ev_grid, ev, thr_ev, curve_path)
-    
-        # モデル比較曲線（EVのみ vs 2D LogReg、LAは現在値で固定）
+
+        # モデル比較曲線
         thr_2d = bundles["LogisticRegression"].best_threshold if thr_mode == "最適（Youden）" else 0.5
         compare_curve_path = os.path.join(tmpdir, "curve_compare_ev_vs_2d.png")
         make_prob_curve_compare_png(
             estimator_ev_only=bundles["LogReg_EV_only"].estimator,
             estimator_2d=bundles["LogisticRegression"].estimator,
             la_fixed=la,
-            ev_min=ev_min,
-            ev_max=ev_max,
-            ev_point=ev,
-            threshold=thr_2d,
+            ev_min=ev_min, ev_max=ev_max,
+            ev_point=ev, threshold=thr_2d,
             out_path=compare_curve_path,
-            title=f"モデル比較：EVのみ vs 2D（LA={la:.1f}°固定）",
+            title=f"モデル比較：EVのみ vs 2D（LA={la:.1f}°固定）"
         )
-    
-        # outputs の並びと1対1で返す（17個）
+
+        # 返却（outputs と完全一致：17個）
         return (
             df,                                        # 1  out_table
             map_paths["LogisticRegression"],           # 2  img_logreg
@@ -526,19 +478,14 @@ def main():
             rows,                                      # 8  state_table_rows
             map_paths,                                 # 9  state_map_paths
             surf_paths,                                # 10 state_surf_paths
-            iframe_log,                                # 11 plot_log  (gr.HTML)
-            iframe_svm,                                # 12 plot_svm  (gr.HTML)
-            iframe_rf,                                 # 13 plot_rf   (gr.HTML)
+            fig_log,                                   # 11 plot_log  (gr.Plot)
+            fig_svm,                                   # 12 plot_svm  (gr.Plot)
+            fig_rf,                                    # 13 plot_rf   (gr.Plot)
             curve_path,                                # 14 curve_ev_only (Image)
             compare_curve_path,                        # 15 curve_compare (Image)
             curve_path,                                # 16 state_curve_path
-            compare_curve_path,                        # 17 state_compare_curve_path
+            compare_curve_path                         # 17 state_compare_curve_path
         )
-
-
-
-
-
 
     def make_pdf(ev: float, la: float, thr_mode: str, table_rows, map_paths, surf_paths, curve_path, compare_curve_path):
         out_pdf = os.path.join(tempfile.gettempdir(), f"HR_Predict_Report_{int(time.time())}.pdf")
@@ -579,10 +526,9 @@ def main():
 
         gr.Markdown("### インタラクティブ 3D（マウスで回転・拡大）")
         with gr.Row():
-            plot_log = gr.HTML(label="Logistic Regression (3D Interactive)")
-            plot_svm = gr.HTML(label="SVM (RBF) (3D Interactive)")
-            plot_rf  = gr.HTML(label="Random Forest (3D Interactive)")
-
+            plot_log = gr.Plot(label="Logistic Regression (3D Interactive)")
+            plot_svm = gr.Plot(label="SVM (RBF) (3D Interactive)")
+            plot_rf  = gr.Plot(label="Random Forest (3D Interactive)")
 
         # PDF生成用の状態
         state_table_rows = gr.State()
@@ -596,16 +542,15 @@ def main():
             inputs=[ev, la, thr_mode],
             outputs=[
                 out_table,                 # 1  結果表
-                img_logreg, img_svm, img_rf,            # 2-4  2Dマップ3枚
-                surf_logreg, surf_svm, surf_rf,         # 5-7  3D画像3枚（静止画）
+                img_logreg, img_svm, img_rf,            # 2-4  2Dマップ
+                surf_logreg, surf_svm, surf_rf,         # 5-7  3D静止画
                 state_table_rows, state_map_paths, state_surf_paths,  # 8-10 States
-                plot_log, plot_svm, plot_rf,            # 11-13 ★インタラクティブ3D(HTML) ここが穴
+                plot_log, plot_svm, plot_rf,            # 11-13 インタラクティブ3D（Plotly Figure）
                 curve_ev_only,                          # 14  1D曲線 画像
                 curve_compare,                          # 15  比較曲線 画像
                 state_curve_path, state_compare_curve_path  # 16-17 States
             ]
         )
-
 
         gr.Markdown("---")
         btn_pdf = gr.Button("PDFを生成")
@@ -617,10 +562,8 @@ def main():
             outputs=[out_pdf]
         )
 
-    demo.launch()
+    demo.launch()  # HF Spacesでは share=False でOK
 
 
 if __name__ == "__main__":
-
     main()
-
