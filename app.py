@@ -487,6 +487,36 @@ def main():
             compare_curve_path                         # 17 state_compare_curve_path
         )
 
+    def batch_predict(file_obj, thr_mode: str):
+        # 期待する列: launch_speed, launch_angle
+        try:
+            df_in = pd.read_csv(file_obj.name)
+        except Exception as e:
+            return None, f"CSV読み込みエラー: {e}"
+
+        if not {"launch_speed", "launch_angle"}.issubset(df_in.columns):
+            return None, "CSVに 'launch_speed','launch_angle' 列が必要です。"
+
+        # 使うモデル（ここでは 2D ロジスティック回帰を代表に）
+        mdl = bundles["LogisticRegression"].estimator
+        thr = bundles["LogisticRegression"].best_threshold if thr_mode == "最適（Youden）" else 0.5
+
+        Xb = df_in[["launch_speed", "launch_angle"]].to_numpy()
+        probs = mdl.predict_proba(Xb)[:, 1]
+        labels = np.where(probs >= thr, "HR", "その他ヒット")
+
+        df_out = df_in.copy()
+        df_out["prob_LogReg2D"] = probs
+        df_out["label_at_thr"] = labels
+        df_out["threshold_used"] = thr
+
+        # 保存（Spaceの一時領域）
+        out_path = os.path.join(tempfile.gettempdir(), f"batch_result_{int(time.time())}.csv")
+        df_out.to_csv(out_path, index=False, encoding="utf-8")
+
+        return out_path, f"OK: {len(df_out)} 行を処理しました。"
+
+    
     def make_pdf(ev: float, la: float, thr_mode: str, table_rows, map_paths, surf_paths, curve_path, compare_curve_path):
         out_pdf = os.path.join(tempfile.gettempdir(), f"HR_Predict_Report_{int(time.time())}.pdf")
         pdf_path = build_pdf(out_pdf, table_rows, map_paths, surf_paths, curve_path, compare_curve_path, ev, la, thr_mode, have_noto)
@@ -561,9 +591,23 @@ def main():
             inputs=[ev, la, thr_mode, state_table_rows, state_map_paths, state_surf_paths, state_curve_path, state_compare_curve_path],
             outputs=[out_pdf]
         )
-
+         gr.Markdown("### バッチ予測（CSV一括）")
+        with gr.Row():
+            csv_in = gr.File(label="入力CSV（列: launch_speed, launch_angle）", file_types=[".csv"])
+        with gr.Row():
+            btn_batch = gr.Button("CSVを処理して結果をダウンロード")
+        with gr.Row():
+            csv_out = gr.File(label="出力CSV（確率と判定を追記）")
+            batch_msg = gr.Markdown()
+    
+        btn_batch.click(
+            batch_predict,
+            inputs=[csv_in, thr_mode],
+            outputs=[csv_out, batch_msg]
+        )
     demo.launch()  # HF Spacesでは share=False でOK
 
 
 if __name__ == "__main__":
     main()
+
