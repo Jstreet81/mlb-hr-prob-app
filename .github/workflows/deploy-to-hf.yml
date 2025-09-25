@@ -14,17 +14,14 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to HF Space (official pattern + token sanitize)
+      - name: Push to HF Space (force overwrite Space from GitHub)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -e
           USERNAME="Shu8jst"
           SPACE_NAME="mlb-hr-prob-app"
-
-          # 改行や余計な空白を除去（コピー時の末尾改行対策）
           STRIPPED_TOKEN="$(printf %s "$HF_TOKEN" | tr -d '\r\n')"
 
-          # 公式の push 形式（username:token@...）
-          # 参考: Hugging Face docs "Managing Spaces with Github Actions"
-          git push "https://$USERNAME:${STRIPPED_TOKEN}@huggingface.co/spaces/$USERNAME/$SPACE_NAME" main
+          # Space 側の main を GitHub の main で上書き（--force）
+          git push --force "https://$USERNAME:${STRIPPED_TOKEN}@huggingface.co/spaces/$USERNAME/$SPACE_NAME" HEAD:main
