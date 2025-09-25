@@ -473,21 +473,26 @@ def main():
         html_rf  = fig_rf.to_html(include_plotlyjs="inline",  full_html=False)
     
         # （iframeでサニタイズ影響を回避しつつ高さを固定）
+        safe_log = html_log.replace('"', '&quot;')
+        safe_svm = html_svm.replace('"', '&quot;')
+        safe_rf  = html_rf.replace('"', '&quot;')
+        
         iframe_log = (
             "<iframe style='width:100%;height:520px;border:0;' "
             "sandbox='allow-scripts allow-same-origin' "
-            f"srcdoc='{pyhtml.escape(html_log)}'></iframe>"
+            f'srcdoc="{safe_log}"></iframe>'
         )
         iframe_svm = (
             "<iframe style='width:100%;height:520px;border:0;' "
             "sandbox='allow-scripts allow-same-origin' "
-            f"srcdoc='{pyhtml.escape(html_svm)}'></iframe>"
+            f'srcdoc="{safe_svm}"></iframe>'
         )
         iframe_rf = (
             "<iframe style='width:100%;height:520px;border:0;' "
             "sandbox='allow-scripts allow-same-origin' "
-            f"srcdoc='{pyhtml.escape(html_rf)}'></iframe>"
+            f'srcdoc="{safe_rf}"></iframe>'
         )
+
     
         # EVのみ 1D 曲線（しきい値は選択に追随）
         thr_ev = bundles["LogReg_EV_only"].best_threshold if thr_mode == "最適（Youden）" else 0.5
@@ -618,3 +623,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
