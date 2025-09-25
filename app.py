@@ -493,15 +493,18 @@ def main():
             surf_paths["LogisticRegression"],
             surf_paths["SVM_RBF"],
             surf_paths["RandomForest"],
-            rows,                 # state_table_rows 用
-            map_paths,            # state_map_paths 用
-            surf_paths,           # state_surf_paths 用
-            fig_log, fig_svm, fig_rf,   # ← ← ここを直す！
-            curve_path,           # Image: curve_ev_only
-            compare_curve_path,   # Image: curve_compare
-            curve_path,           # ★ State: state_curve_path（追加）
-            compare_curve_path    # ★ State: state_compare_curve_path（追加）
+            rows,
+            map_paths,
+            surf_paths,
+            f"<div style='height:500px'>{fig_log.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
+            f"<div style='height:500px'>{fig_svm.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
+            f"<div style='height:500px'>{fig_rf.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
+            curve_path,
+            compare_curve_path,
+            curve_path,
+            compare_curve_path
         )
+
 
 
     def make_pdf(ev: float, la: float, thr_mode: str, table_rows, map_paths, surf_paths, curve_path, compare_curve_path):
@@ -586,5 +589,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
