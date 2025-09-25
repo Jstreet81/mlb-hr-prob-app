@@ -14,14 +14,18 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to HF Space (force overwrite Space from GitHub)
+      - name: Push to HF Space (force, sanitize token, HEAD->main)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}          # 例: hf_xxx
+          HF_SPACE: ${{ secrets.HF_SPACE }}          # 例: Shu8jst/mlb-hr-prob-app
         run: |
           set -e
-          USERNAME="Shu8jst"
-          SPACE_NAME="mlb-hr-prob-app"
+          # 改行/空白を除去（URL埋め込み時の壊れ対策）
           STRIPPED_TOKEN="$(printf %s "$HF_TOKEN" | tr -d '\r\n')"
-
-          # Space 側の main を GitHub の main で上書き（--force）
+          # ユーザー名とスペース名を分離
+          USERNAME="${HF_SPACE%%/*}"
+          SPACE_NAME="${HF_SPACE##*/}"
+          # HEAD(現在のコミット) を Space の main に強制同期
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
           git push --force "https://$USERNAME:${STRIPPED_TOKEN}@huggingface.co/spaces/$USERNAME/$SPACE_NAME" HEAD:main
