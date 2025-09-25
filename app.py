@@ -507,6 +507,7 @@ def main():
 
 
 
+
     def make_pdf(ev: float, la: float, thr_mode: str, table_rows, map_paths, surf_paths, curve_path, compare_curve_path):
         out_pdf = os.path.join(tempfile.gettempdir(), f"HR_Predict_Report_{int(time.time())}.pdf")
         pdf_path = build_pdf(out_pdf, table_rows, map_paths, surf_paths, curve_path, compare_curve_path, ev, la, thr_mode, have_noto)
@@ -589,6 +590,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
