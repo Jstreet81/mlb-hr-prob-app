@@ -485,6 +485,7 @@ def main():
             title=f"モデル比較：EVのみ vs 2D（LA={la:.1f}°固定）"
         )
 
+            # …略…
         return (
             df,
             map_paths["LogisticRegression"],
@@ -496,14 +497,15 @@ def main():
             rows,
             map_paths,
             surf_paths,
-            f"<div style='height:500px'>{fig_log.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
-            f"<div style='height:500px'>{fig_svm.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
-            f"<div style='height:500px'>{fig_rf.to_html(include_plotlyjs='cdn', full_html=False)}</div>",
+            "<div style='padding:8px;background:#eef'>TEST LOG</div>",
+            "<div style='padding:8px;background:#eef'>TEST SVM</div>",
+            "<div style='padding:8px;background:#eef'>TEST RF</div>",
             curve_path,
             compare_curve_path,
             curve_path,
             compare_curve_path
-        )
+                )
+
 
 
 
@@ -590,6 +592,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
