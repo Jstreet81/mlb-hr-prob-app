@@ -1,0 +1,29 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set git identity
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+
+      # Hugging Face の Space を "hf" リモートとして追加して push
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
+        run: |
+          # 既存の "hf" があれば消して作り直し
+          git remote remove hf 2>/dev/null || true
+          git remote add hf https://$HF_TOKEN@huggingface.co/spaces/$HF_SPACE
+          # main ブランチを Space 側の main に force 更新
+          git push -f hf HEAD:main
