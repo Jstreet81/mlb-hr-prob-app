@@ -543,9 +543,10 @@ def main():
 
         gr.Markdown("### インタラクティブ 3D（マウスで回転・拡大）")
         with gr.Row():
-            plot_log = gr.Plot(label="Logistic Regression (3D Interactive)")
-            plot_svm = gr.Plot(label="SVM (RBF) (3D Interactive)")
-            plot_rf  = gr.Plot(label="Random Forest (3D Interactive)")
+            plot_log = gr.Plotly(label="Logistic Regression (3D Interactive)")
+            plot_svm = gr.Plotly(label="SVM (RBF) (3D Interactive)")
+            plot_rf  = gr.Plotly(label="Random Forest (3D Interactive)")
+
 
         # PDF生成用の状態
         state_table_rows = gr.State()
@@ -582,4 +583,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
