@@ -591,7 +591,7 @@ def main():
             inputs=[ev, la, thr_mode, state_table_rows, state_map_paths, state_surf_paths, state_curve_path, state_compare_curve_path],
             outputs=[out_pdf]
         )
-         gr.Markdown("### バッチ予測（CSV一括）")
+        gr.Markdown("### バッチ予測（CSV一括）")
         with gr.Row():
             csv_in = gr.File(label="入力CSV（列: launch_speed, launch_angle）", file_types=[".csv"])
         with gr.Row():
@@ -610,4 +610,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
