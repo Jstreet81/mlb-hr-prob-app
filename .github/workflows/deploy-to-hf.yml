@@ -1,4 +1,4 @@
-name: Deploy to Hugging Face Spaces
+name: Deploy to Hugging Face Spaces (CLI)
 
 on:
   push:
@@ -8,24 +8,34 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo (with LFS)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           lfs: true
 
-      - name: Push to HF Space (force, sanitize token, HEAD->main)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install hub client
+        run: pip install --quiet "huggingface_hub>=0.25.0"
+
+      - name: Upload folder to Space (overwrite)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}          # 例: hf_xxx
-          HF_SPACE: ${{ secrets.HF_SPACE }}          # 例: Shu8jst/mlb-hr-prob-app
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
         run: |
-          set -e
-          # 改行/空白を除去（URL埋め込み時の壊れ対策）
-          STRIPPED_TOKEN="$(printf %s "$HF_TOKEN" | tr -d '\r\n')"
-          # ユーザー名とスペース名を分離
-          USERNAME="${HF_SPACE%%/*}"
-          SPACE_NAME="${HF_SPACE##*/}"
-          # HEAD(現在のコミット) を Space の main に強制同期
-          git config user.email "actions@github.com"
-          git config user.name "github-actions[bot]"
-          git push --force "https://$USERNAME:${STRIPPED_TOKEN}@huggingface.co/spaces/$USERNAME/$SPACE_NAME" HEAD:main
+          python - <<'PY'
+          import os
+          from huggingface_hub import upload_folder
+          token = os.environ["HF_TOKEN"].strip()
+          space = os.environ["HF_SPACE"].strip()
+          upload_folder(
+              folder_path=".",
+              repo_id=space,
+              repo_type="space",
+              token=token,
+              commit_message="sync from GitHub Actions",
+              # .githubなどはSpace側に不要
+              ignore_patterns=[".git/*", ".github/*", "**/__pycache__/*"]
+          )
+          PY
