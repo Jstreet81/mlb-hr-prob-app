@@ -8,22 +8,23 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (with LFS)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
 
-      - name: Configure Git and auth header
+      - name: Push to HF Space (official pattern + token sanitize)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config user.email "actions@github.com"
-          git config user.name "github-actions[bot]"
-          # ここがポイント：トークンをURLに埋め込まず、HFドメインへのHTTPヘッダーに付与
-          git config --global http.https://huggingface.co/.extraheader "Authorization: Bearer ${HF_TOKEN}"
-
-      - name: Push to HF Space
-        env:
-          HF_SPACE: ${{ secrets.HF_SPACE }}  # 例: Shu8jst/mlb-hr-prob-app
-        run: |
           set -e
-          # 通常のURLでOK（トークンはextraheaderで送られる）
-          git push --force "https://huggingface.co/spaces/${HF_SPACE}" HEAD:main
+          USERNAME="Shu8jst"
+          SPACE_NAME="mlb-hr-prob-app"
+
+          # 改行や余計な空白を除去（コピー時の末尾改行対策）
+          STRIPPED_TOKEN="$(printf %s "$HF_TOKEN" | tr -d '\r\n')"
+
+          # 公式の push 形式（username:token@...）
+          # 参考: Hugging Face docs "Managing Spaces with Github Actions"
+          git push "https://$USERNAME:${STRIPPED_TOKEN}@huggingface.co/spaces/$USERNAME/$SPACE_NAME" main
