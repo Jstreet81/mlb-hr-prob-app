@@ -1,8 +1,8 @@
-gradio
+gradio>=4.44.1
+plotly==5.22.0
 scikit-learn
 pandas
 numpy
 matplotlib
-plotly==5.22.0
 reportlab
 pillow
