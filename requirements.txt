@@ -3,6 +3,6 @@ scikit-learn
 pandas
 numpy
 matplotlib
-plotly
+plotly==5.22.0
 reportlab
 pillow
