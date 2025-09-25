@@ -28,6 +28,8 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import pandas as pd
+import html as pyhtml
+
 
 # Matplotlib / Plotly
 import matplotlib
@@ -435,25 +437,24 @@ def main():
         rows = []
         for name, bundle in bundles.items():
             x_sub = x_full[:, list(bundle.feature_indices)]
-            prob = float(bundle.estimator.predict_proba(x_sub)[0,1])
+            prob = float(bundle.estimator.predict_proba(x_sub)[0, 1])
             thr = bundle.best_threshold if thr_mode == "最適（Youden）" else 0.5
             label = "HR" if prob >= thr else "その他ヒット"
             disp_name = {
                 "LogisticRegression": "LogisticRegression",
                 "SVM_RBF": "SVM_RBF",
                 "RandomForest": "RandomForest",
-                "LogReg_EV_only": "LogReg（EVのみ）"
+                "LogReg_EV_only": "LogReg（EVのみ）",
             }.get(name, name)
             rows.append([disp_name, f"{prob:.3f}", f"{thr:.3f}", label])
-        df = pd.DataFrame(rows, columns=["モデル","HR確率","使用しきい値","判定"])
-
+        df = pd.DataFrame(rows, columns=["モデル", "HR確率", "使用しきい値", "判定"])
+    
         # 図を一時ファイルとして保存し、パスを返す
         tmpdir = tempfile.mkdtemp(prefix="hr_maps_")
-        map_paths = {}
-        surf_paths = {}
-
+        map_paths, surf_paths = {}, {}
+    
         # 2D/3D 図（2D特徴モデルのみ）
-        for key_for_plot in ["LogisticRegression","SVM_RBF","RandomForest"]:
+        for key_for_plot in ["LogisticRegression", "SVM_RBF", "RandomForest"]:
             bundle = bundles[key_for_plot]
             p_map = os.path.join(tmpdir, f"map_{bundle.name}.png")
             p_surf = os.path.join(tmpdir, f"surf_{bundle.name}.png")
@@ -461,17 +462,38 @@ def main():
             make_prob_surface_png(bundle.estimator, ev_grid, la_grid, ev, la, p_surf)
             map_paths[key_for_plot] = p_map
             surf_paths[key_for_plot] = p_surf
-
-        # インタラクティブ3D
-        fig_log = make_prob_surface_plotly(bundles['LogisticRegression'].estimator, ev_grid, la_grid, ev, la)
-        fig_svm = make_prob_surface_plotly(bundles['SVM_RBF'].estimator, ev_grid, la_grid, ev, la)
-        fig_rf  = make_prob_surface_plotly(bundles['RandomForest'].estimator, ev_grid, la_grid, ev, la)
-
+    
+        # インタラクティブ3D（Plotly）→ HTML化（inlineでJS同梱 & 高さ指定）
+        fig_log = make_prob_surface_plotly(bundles["LogisticRegression"].estimator, ev_grid, la_grid, ev, la)
+        fig_svm = make_prob_surface_plotly(bundles["SVM_RBF"].estimator, ev_grid, la_grid, ev, la)
+        fig_rf  = make_prob_surface_plotly(bundles["RandomForest"].estimator,   ev_grid, la_grid, ev, la)
+    
+        html_log = fig_log.to_html(include_plotlyjs="inline", full_html=False)
+        html_svm = fig_svm.to_html(include_plotlyjs="inline", full_html=False)
+        html_rf  = fig_rf.to_html(include_plotlyjs="inline",  full_html=False)
+    
+        # （iframeでサニタイズ影響を回避しつつ高さを固定）
+        iframe_log = (
+            "<iframe style='width:100%;height:520px;border:0;' "
+            "sandbox='allow-scripts allow-same-origin' "
+            f"srcdoc='{pyhtml.escape(html_log)}'></iframe>"
+        )
+        iframe_svm = (
+            "<iframe style='width:100%;height:520px;border:0;' "
+            "sandbox='allow-scripts allow-same-origin' "
+            f"srcdoc='{pyhtml.escape(html_svm)}'></iframe>"
+        )
+        iframe_rf = (
+            "<iframe style='width:100%;height:520px;border:0;' "
+            "sandbox='allow-scripts allow-same-origin' "
+            f"srcdoc='{pyhtml.escape(html_rf)}'></iframe>"
+        )
+    
         # EVのみ 1D 曲線（しきい値は選択に追随）
         thr_ev = bundles["LogReg_EV_only"].best_threshold if thr_mode == "最適（Youden）" else 0.5
         curve_path = os.path.join(tmpdir, "curve_logreg_ev_only.png")
         make_prob_curve_ev_png(bundles["LogReg_EV_only"].estimator, ev_grid, ev, thr_ev, curve_path)
-
+    
         # モデル比較曲線（EVのみ vs 2D LogReg、LAは現在値で固定）
         thr_2d = bundles["LogisticRegression"].best_threshold if thr_mode == "最適（Youden）" else 0.5
         compare_curve_path = os.path.join(tmpdir, "curve_compare_ev_vs_2d.png")
@@ -479,32 +501,35 @@ def main():
             estimator_ev_only=bundles["LogReg_EV_only"].estimator,
             estimator_2d=bundles["LogisticRegression"].estimator,
             la_fixed=la,
-            ev_min=ev_min, ev_max=ev_max,
-            ev_point=ev, threshold=thr_2d,
+            ev_min=ev_min,
+            ev_max=ev_max,
+            ev_point=ev,
+            threshold=thr_2d,
             out_path=compare_curve_path,
-            title=f"モデル比較：EVのみ vs 2D（LA={la:.1f}°固定）"
+            title=f"モデル比較：EVのみ vs 2D（LA={la:.1f}°固定）",
+        )
+    
+        # outputs の並びと1対1で返す（17個）
+        return (
+            df,                                        # 1  out_table
+            map_paths["LogisticRegression"],           # 2  img_logreg
+            map_paths["SVM_RBF"],                      # 3  img_svm
+            map_paths["RandomForest"],                 # 4  img_rf
+            surf_paths["LogisticRegression"],          # 5  surf_logreg
+            surf_paths["SVM_RBF"],                     # 6  surf_svm
+            surf_paths["RandomForest"],                # 7  surf_rf
+            rows,                                      # 8  state_table_rows
+            map_paths,                                 # 9  state_map_paths
+            surf_paths,                                # 10 state_surf_paths
+            iframe_log,                                # 11 plot_log  (gr.HTML)
+            iframe_svm,                                # 12 plot_svm  (gr.HTML)
+            iframe_rf,                                 # 13 plot_rf   (gr.HTML)
+            curve_path,                                # 14 curve_ev_only (Image)
+            compare_curve_path,                        # 15 curve_compare (Image)
+            curve_path,                                # 16 state_curve_path
+            compare_curve_path,                        # 17 state_compare_curve_path
         )
 
-            # …略…
-        return (
-            df,
-            map_paths["LogisticRegression"],
-            map_paths["SVM_RBF"],
-            map_paths["RandomForest"],
-            surf_paths["LogisticRegression"],
-            surf_paths["SVM_RBF"],
-            surf_paths["RandomForest"],
-            rows,
-            map_paths,
-            surf_paths,
-            "<div style='padding:8px;background:#eef'>TEST LOG</div>",
-            "<div style='padding:8px;background:#eef'>TEST SVM</div>",
-            "<div style='padding:8px;background:#eef'>TEST RF</div>",
-            curve_path,
-            compare_curve_path,
-            curve_path,
-            compare_curve_path
-                )
 
 
 
@@ -554,7 +579,6 @@ def main():
             plot_rf  = gr.HTML(label="Random Forest (3D Interactive)")
 
 
-
         # PDF生成用の状態
         state_table_rows = gr.State()
         state_map_paths = gr.State()
@@ -566,15 +590,17 @@ def main():
             predict_and_plot,
             inputs=[ev, la, thr_mode],
             outputs=[
-                out_table,
-                img_logreg, img_svm, img_rf,
-                surf_logreg, surf_svm, surf_rf,
-                state_table_rows, state_map_paths, state_surf_paths,
-                plot_log, plot_svm, plot_rf,
-                curve_ev_only, curve_compare,
-                state_curve_path, state_compare_curve_path,
+                out_table,                 # 1  結果表
+                img_logreg, img_svm, img_rf,            # 2-4  2Dマップ3枚
+                surf_logreg, surf_svm, surf_rf,         # 5-7  3D画像3枚（静止画）
+                state_table_rows, state_map_paths, state_surf_paths,  # 8-10 States
+                plot_log, plot_svm, plot_rf,            # 11-13 ★インタラクティブ3D(HTML) ここが穴
+                curve_ev_only,                          # 14  1D曲線 画像
+                curve_compare,                          # 15  比較曲線 画像
+                state_curve_path, state_compare_curve_path  # 16-17 States
             ]
         )
+
 
         gr.Markdown("---")
         btn_pdf = gr.Button("PDFを生成")
@@ -592,8 +618,3 @@ def main():
 if __name__ == "__main__":
 
     main()
-
-
-
-
-
